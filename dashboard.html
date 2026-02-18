@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHL GOAL SNIPER — Live Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #05070d;
+  --surface: #090d16;
+  --card:    #0d1220;
+  --border:  #141f33;
+  --border2: #1a2a44;
+  --ice:     #00cfff;
+  --green:   #00ff88;
+  --red:     #ff2855;
+  --orange:  #ff8800;
+  --yellow:  #ffe600;
+  --muted:   #2a4060;
+  --text:    #8aabcc;
+  --bright:  #d0e8ff;
+  --mono:    'Space Mono', monospace;
+  --sans:    'Barlow Condensed', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 100%, rgba(0,207,255,0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 30% at 50% 0%,   rgba(0,207,255,0.03) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(9,13,22,0.95);
+  border-bottom: 1px solid var(--border2);
+  backdrop-filter: blur(12px);
+  padding: 0 28px;
+  height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+
+.brand-puck {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: linear-gradient(135deg, #1a2a44, #0d1a2e);
+  border: 2px solid var(--ice);
+  box-shadow: 0 0 12px rgba(0,207,255,0.5);
+  animation: puckGlow 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes puckGlow {
+  0%,100% { box-shadow: 0 0 12px rgba(0,207,255,0.5); }
+  50%      { box-shadow: 0 0 24px rgba(0,207,255,0.9), 0 0 40px rgba(0,207,255,0.3); }
+}
+
+.brand-title { font-weight: 900; font-size: 1.4rem; letter-spacing: 0.12em; color: var(--bright); text-transform: uppercase; }
+.brand-sub   { font-family: var(--mono); font-size: 0.55rem; color: var(--muted); letter-spacing: 0.1em; }
+
+.topbar-right { display: flex; align-items: center; gap: 20px; }
+
+.status-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid rgba(0,255,136,0.2);
+  background: rgba(0,255,136,0.05);
+}
+
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: blink 1.2s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.status-label { font-family: var(--mono); font-size: 0.6rem; color: var(--green); letter-spacing: 0.1em; }
+.clock        { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+
+/* ── TAB NAV ── */
+.tab-nav {
+  position: relative; z-index: 1;
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border2);
+  background: var(--surface);
+  padding: 0 24px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none; border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 12px 20px;
+  font-family: var(--mono); font-size: 0.65rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  cursor: pointer; transition: all 0.15s;
+  margin-bottom: -1px;
+}
+
+.tab-btn:hover  { color: var(--text); }
+.tab-btn.active { color: var(--ice); border-bottom-color: var(--ice); }
+
+/* ── TAB PAGES ── */
+.tab-page { display: none; position: relative; z-index: 1; }
+.tab-page.active { display: block; }
+
+/* ── LAYOUT ── */
+.page { padding: 20px 24px; max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+/* ── KPI ROW ── */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+
+.kpi {
+  background: var(--card); border: 1px solid var(--border);
+  padding: 14px 16px; position: relative; overflow: hidden;
+}
+
+.kpi::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.kpi.ice::after    { background: var(--ice);    opacity: 0.7; }
+.kpi.green::after  { background: var(--green);  opacity: 0.7; }
+.kpi.red::after    { background: var(--red);    opacity: 0.7; }
+.kpi.orange::after { background: var(--orange); opacity: 0.7; }
+.kpi.yellow::after { background: var(--yellow); opacity: 0.7; }
+
+.kpi-label { font-family: var(--mono); font-size: 0.55rem; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+.kpi-val   { font-weight: 900; font-size: 2rem; line-height: 1; color: var(--bright); }
+.kpi-val.ice    { color: var(--ice);    text-shadow: 0 0 20px rgba(0,207,255,0.4); }
+.kpi-val.green  { color: var(--green);  text-shadow: 0 0 20px rgba(0,255,136,0.4); }
+.kpi-val.red    { color: var(--red);    text-shadow: 0 0 20px rgba(255,40,85,0.4); }
+.kpi-val.orange { color: var(--orange); }
+.kpi-val.yellow { color: var(--yellow); }
+.kpi-sub   { font-family: var(--mono); font-size: 0.55rem; color: var(--muted); margin-top: 4px; }
+
+/* ── MAIN GRID ── */
+.main-grid { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
+@media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-bottom: none;
+}
+
+.section-title { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+.section-count { font-family: var(--mono); font-size: 0.6rem; color: var(--ice); }
+
+/* ── FEED ── */
+.feed-wrap { display: flex; flex-direction: column; }
+
+.feed {
+  background: var(--card); border: 1px solid var(--border);
+  min-height: 400px; max-height: 620px; overflow-y: auto;
+  padding: 8px; display: flex; flex-direction: column; gap: 8px;
+}
+
+.feed::-webkit-scrollbar { width: 4px; }
+.feed::-webkit-scrollbar-track { background: var(--surface); }
+.feed::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.bet-card {
+  background: var(--surface); border: 1px solid var(--border2); border-left: 3px solid var(--border2);
+  padding: 12px 14px;
+  animation: slideIn 0.25s cubic-bezier(0.34,1.4,0.64,1) forwards;
+}
+
+@keyframes slideIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+
+.bet-card.filled    { border-left-color: var(--green);  background: linear-gradient(90deg, rgba(0,255,136,0.03) 0%, var(--surface) 50%); }
+.bet-card.missed    { border-left-color: var(--red);    background: linear-gradient(90deg, rgba(255,40,85,0.03)  0%, var(--surface) 50%); }
+.bet-card.no-market { border-left-color: var(--muted); }
+
+.bet-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.bet-player { font-size: 1rem; font-weight: 700; color: var(--bright); }
+.bet-tweet  { font-size: 0.72rem; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+.bet-badge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em; font-weight: 700; flex-shrink: 0;
+}
+
+.bet-badge.filled    { background: rgba(0,255,136,0.12); color: var(--green);  border: 1px solid rgba(0,255,136,0.25); }
+.bet-badge.missed    { background: rgba(255,40,85,0.1);  color: var(--red);    border: 1px solid rgba(255,40,85,0.2); }
+.bet-badge.no-market { background: rgba(42,64,96,0.3);   color: var(--muted);  border: 1px solid var(--border2); }
+
+.bet-numbers { display: flex; gap: 16px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--border); }
+.bn { display: flex; flex-direction: column; gap: 2px; }
+.bn-label { font-family: var(--mono); font-size: 0.52rem; color: var(--muted); text-transform: uppercase; }
+.bn-val   { font-family: var(--mono); font-size: 0.85rem; color: var(--bright); }
+.bn-val.ice    { color: var(--ice); }
+.bn-val.green  { color: var(--green); }
+.bn-val.orange { color: var(--orange); }
+.bn-val.red    { color: var(--red); }
+
+.bet-ts { font-family: var(--mono); font-size: 0.52rem; color: var(--muted); opacity: 0.5; margin-top: 6px; }
+
+.empty {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 20px; opacity: 0.3; gap: 10px; text-align: center;
+}
+.empty-icon { font-size: 2.5rem; }
+.empty h3 { font-weight: 700; font-size: 1.1rem; letter-spacing: 0.08em; color: var(--text); text-transform: uppercase; }
+.empty p  { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); line-height: 1.8; }
+
+/* ── RIGHT PANEL ── */
+.right-panel { display: flex; flex-direction: column; gap: 16px; }
+
+.chart-wrap { background: var(--card); border: 1px solid var(--border); padding: 14px; }
+.chart-bars { display: flex; align-items: flex-end; gap: 4px; height: 80px; }
+.chart-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.chart-bar { width: 100%; border-radius: 1px 1px 0 0; transition: height 0.4s ease; min-height: 2px; }
+.chart-bar.fast   { background: var(--green); }
+.chart-bar.medium { background: var(--orange); }
+.chart-bar.slow   { background: var(--red); }
+.chart-bar-label  { font-family: var(--mono); font-size: 0.5rem; color: var(--muted); text-align: center; }
+.chart-legend { display: flex; gap: 12px; margin-top: 8px; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 0.55rem; color: var(--muted); }
+.legend-dot  { width: 6px; height: 6px; border-radius: 50%; }
+
+.pnl-wrap { background: var(--card); border: 1px solid var(--border); padding: 14px; }
+.pnl-row  { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 0.7rem; }
+.pnl-row:last-child { border-bottom: none; }
+.pnl-label { color: var(--muted); }
+.pnl-value { color: var(--bright); }
+.pnl-value.pos { color: var(--green); }
+.pnl-value.neg { color: var(--red); }
+.pnl-value.ice { color: var(--ice); }
+
+.log-wrap {
+  background: var(--card); border: 1px solid var(--border);
+  max-height: 220px; overflow-y: auto; padding: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+.log-entry { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; animation: fadeIn 0.15s ease; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.log-ts  { font-family: var(--mono); font-size: 0.55rem; color: var(--muted); flex-shrink: 0; }
+.log-msg { font-family: var(--mono); font-size: 0.62rem; line-height: 1.4; }
+.log-msg.info    { color: var(--text); }
+.log-msg.success { color: var(--green); }
+.log-msg.fire    { color: var(--orange); }
+.log-msg.warn    { color: var(--yellow); }
+.log-msg.error   { color: var(--red); }
+.log-msg.miss    { color: var(--muted); }
+
+/* ── DEMO BAR ── */
+.demo-bar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  padding: 10px 16px;
+  background: rgba(0,207,255,0.04); border: 1px solid rgba(0,207,255,0.12);
+}
+.demo-label { font-family: var(--mono); font-size: 0.62rem; color: var(--ice); letter-spacing: 0.08em; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.btn {
+  background: transparent; border: 1px solid var(--border2); color: var(--text);
+  padding: 6px 14px; font-family: var(--mono); font-size: 0.65rem;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.15s;
+}
+.btn:hover   { border-color: var(--ice); color: var(--ice); background: rgba(0,207,255,0.05); }
+.btn.fire    { border-color: rgba(255,40,85,0.4); color: var(--red); }
+.btn.fire:hover { background: rgba(255,40,85,0.08); }
+.btn.goal    { border-color: rgba(0,255,136,0.4); color: var(--green); }
+.btn.goal:hover { background: rgba(0,255,136,0.08); }
+
+/* ── SETTINGS PAGE ── */
+.settings-page { padding: 28px 24px; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+.settings-section {
+  background: var(--card); border: 1px solid var(--border);
+}
+
+.settings-section-header {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.settings-section-title {
+  font-family: var(--mono); font-size: 0.65rem;
+  letter-spacing: 0.14em; color: var(--ice); text-transform: uppercase;
+}
+
+.settings-section-desc {
+  font-family: var(--mono); font-size: 0.55rem; color: var(--muted);
+}
+
+.settings-body { padding: 18px; display: flex; flex-direction: column; gap: 20px; }
+
+.setting-row {
+  display: grid; grid-template-columns: 1fr 220px;
+  align-items: center; gap: 20px;
+}
+
+@media (max-width: 600px) { .setting-row { grid-template-columns: 1fr; } }
+
+.setting-info {}
+.setting-label { font-size: 1rem; font-weight: 600; color: var(--bright); letter-spacing: 0.02em; margin-bottom: 3px; }
+.setting-desc  { font-family: var(--mono); font-size: 0.58rem; color: var(--muted); line-height: 1.6; }
+
+.setting-control { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+
+/* Number input with +/- */
+.num-input-wrap {
+  display: flex; align-items: center; gap: 0;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.num-btn {
+  background: var(--surface); border: none; color: var(--text);
+  width: 36px; height: 40px; font-size: 1.1rem; cursor: pointer;
+  transition: all 0.12s; display: flex; align-items: center; justify-content: center;
+}
+
+.num-btn:hover { background: var(--border2); color: var(--ice); }
+
+.num-field {
+  background: transparent; border: none; border-left: 1px solid var(--border2); border-right: 1px solid var(--border2);
+  color: var(--bright); font-family: var(--mono); font-size: 0.9rem;
+  width: 80px; height: 40px; text-align: center; outline: none;
+}
+
+/* Remove number input arrows */
+.num-field::-webkit-inner-spin-button,
+.num-field::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+.setting-unit { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); }
+
+/* Toggle switch */
+.toggle-wrap { display: flex; align-items: center; gap: 10px; }
+.toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0;
+  background: var(--border2); transition: 0.2s;
+  border-radius: 12px;
+}
+.toggle-slider::before {
+  content: ''; position: absolute;
+  width: 18px; height: 18px; left: 3px; bottom: 3px;
+  background: var(--muted); transition: 0.2s; border-radius: 50%;
+}
+.toggle input:checked + .toggle-slider { background: rgba(0,207,255,0.3); border: 1px solid var(--ice); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--ice); box-shadow: 0 0 8px rgba(0,207,255,0.6); }
+.toggle-label { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); }
+
+/* Select dropdown */
+.setting-select {
+  background: var(--surface); border: 1px solid var(--border2);
+  color: var(--bright); font-family: var(--mono); font-size: 0.7rem;
+  padding: 8px 12px; outline: none; width: 220px; cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%232a4060'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+
+/* Save button */
+.save-bar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  padding: 16px 24px;
+  background: var(--surface); border: 1px solid var(--border2);
+  position: sticky; bottom: 0; z-index: 10;
+}
+
+.save-status { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+.save-status.saved { color: var(--green); }
+
+.save-btn {
+  background: rgba(0,207,255,0.08); border: 1px solid rgba(0,207,255,0.3);
+  color: var(--ice); padding: 10px 28px;
+  font-family: var(--mono); font-size: 0.7rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  cursor: pointer; transition: all 0.15s;
+}
+
+.save-btn:hover { background: rgba(0,207,255,0.15); box-shadow: 0 0 20px rgba(0,207,255,0.2); }
+
+/* Live preview bar */
+.live-preview {
+  background: rgba(0,207,255,0.04); border: 1px solid rgba(0,207,255,0.1);
+  padding: 12px 18px;
+  display: flex; gap: 24px; flex-wrap: wrap; align-items: center;
+}
+
+.preview-item { display: flex; flex-direction: column; gap: 2px; }
+.preview-label { font-family: var(--mono); font-size: 0.52rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.preview-val   { font-family: var(--mono); font-size: 0.85rem; color: var(--ice); }
+
+.divider { height: 1px; background: var(--border); }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-puck"></div>
+    <div>
+      <div class="brand-title">NHL Goal Sniper</div>
+      <div class="brand-sub">KALSHI // X API // LIVE EXECUTION</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span class="status-label">LIVE</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</div>
+
+<!-- Tab nav -->
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('dashboard', this)">📊 Dashboard</button>
+  <button class="tab-btn"        onclick="switchTab('settings',  this)">⚙️ Settings</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     TAB 1: DASHBOARD
+════════════════════════════════════════════════════ -->
+<div class="tab-page active" id="tab-dashboard">
+<div class="page">
+
+  <!-- Demo controls -->
+  <div class="demo-bar">
+    <span class="demo-label">⚡ DEMO MODE — connect backend for real feed</span>
+    <div class="btn-row">
+      <button class="btn goal" onclick="simulateGoal(false)">🚨 Simulate Goal</button>
+      <button class="btn fire" onclick="simulateGoal(true)">❌ Simulate Miss</button>
+      <button class="btn"      onclick="simulateNoMarket()">📭 No Market</button>
+      <button class="btn"      onclick="clearAll()" style="color:var(--muted)">Clear</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi ice">
+      <div class="kpi-label">Goals Detected</div>
+      <div class="kpi-val ice" id="kGoals">0</div>
+      <div class="kpi-sub">This session</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">Fill Rate</div>
+      <div class="kpi-val green" id="kFillRate">—</div>
+      <div class="kpi-sub" id="kFillSub">0 / 0 bets</div>
+    </div>
+    <div class="kpi orange">
+      <div class="kpi-label">Avg Latency</div>
+      <div class="kpi-val orange" id="kLatency">—</div>
+      <div class="kpi-sub">Tweet → filled</div>
+    </div>
+    <div class="kpi yellow">
+      <div class="kpi-label">Best Latency</div>
+      <div class="kpi-val yellow" id="kBestLat">—</div>
+      <div class="kpi-sub">Fastest fill ever</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">Est. P&L</div>
+      <div class="kpi-val green" id="kPnl">$0.00</div>
+      <div class="kpi-sub">If open YES resolve</div>
+    </div>
+    <div class="kpi ice">
+      <div class="kpi-label">Total Wagered</div>
+      <div class="kpi-val ice" id="kWagered">$0.00</div>
+      <div class="kpi-sub">This session</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Market Hit Rate</div>
+      <div class="kpi-val" id="kMarketRate">—</div>
+      <div class="kpi-sub">Markets found</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Avg Fill Price</div>
+      <div class="kpi-val" id="kAvgPrice">—</div>
+      <div class="kpi-sub">Cents per contract</div>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="main-grid">
+
+    <!-- Bet feed -->
+    <div class="feed-wrap">
+      <div class="section-header">
+        <span class="section-title">Live Bet Feed</span>
+        <span class="section-count" id="feedCount">0 events</span>
+      </div>
+      <div class="feed" id="feed">
+        <div class="empty" id="emptyState">
+          <div class="empty-icon">🏒</div>
+          <h3>Awaiting Goals</h3>
+          <p>STREAM IS LIVE<br>MONITORING 31 OFFICIAL NHL ACCOUNTS<br>BETS APPEAR HERE ON DETECTION</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panel -->
+    <div class="right-panel">
+
+      <!-- Latency chart -->
+      <div>
+        <div class="section-header">
+          <span class="section-title">Latency Distribution</span>
+          <span class="section-count" id="latCount">0 fills</span>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-bars" id="latencyBars">
+            <div style="color:var(--muted);font-family:var(--mono);font-size:0.6rem;padding:20px">No fills yet</div>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>&lt;200ms</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>200–500ms</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>&gt;500ms</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- P&L -->
+      <div>
+        <div class="section-header"><span class="section-title">P&L Breakdown</span></div>
+        <div class="pnl-wrap">
+          <div class="pnl-row"><span class="pnl-label">Total wagered</span>      <span class="pnl-value ice"  id="pWagered">$0.00</span></div>
+          <div class="pnl-row"><span class="pnl-label">Est. gross return</span>  <span class="pnl-value"      id="pGross">$0.00</span></div>
+          <div class="pnl-row"><span class="pnl-label">Est. Kalshi fees (~7%)</span><span class="pnl-value neg" id="pFees">-$0.00</span></div>
+          <div class="pnl-row"><span class="pnl-label">Est. net P&L</span>       <span class="pnl-value pos"  id="pNet">$0.00</span></div>
+          <div class="pnl-row"><span class="pnl-label">Bets fired</span>         <span class="pnl-value"      id="pFired">0</span></div>
+          <div class="pnl-row"><span class="pnl-label">Bets filled</span>        <span class="pnl-value green" id="pFilled">0</span></div>
+          <div class="pnl-row"><span class="pnl-label">Missed (no fill)</span>   <span class="pnl-value red"  id="pMissed">0</span></div>
+          <div class="pnl-row"><span class="pnl-label">No market found</span>    <span class="pnl-value"      id="pNoMkt">0</span></div>
+          <div class="pnl-row" style="flex-direction:column;align-items:flex-start;gap:4px"><span class="pnl-label">⛔ Banned tonight</span><span id="bannedList" style="font-size:0.62rem;color:var(--orange);line-height:1.6;margin-top:2px">None</span></div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div>
+        <div class="section-header">
+          <span class="section-title">Execution Log</span>
+          <span class="section-count" id="logCount">0 events</span>
+        </div>
+        <div class="log-wrap" id="logList"></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</div><!-- end tab-dashboard -->
+
+
+<!-- ═══════════════════════════════════════════════════
+     TAB 2: SETTINGS
+════════════════════════════════════════════════════ -->
+<div class="tab-page" id="tab-settings">
+<div class="settings-page">
+
+  <!-- Live preview -->
+  <div class="live-preview">
+    <div class="preview-item">
+      <span class="preview-label">Bet per goal</span>
+      <span class="preview-val" id="prev-bet">$10.00</span>
+    </div>
+    <div class="preview-item">
+      <span class="preview-label">Max bet cap</span>
+      <span class="preview-val" id="prev-max">$25.00</span>
+    </div>
+    <div class="preview-item">
+      <span class="preview-label">Bets/hour limit</span>
+      <span class="preview-val" id="prev-rate">10</span>
+    </div>
+    <div class="preview-item">
+      <span class="preview-label">Max market price</span>
+      <span class="preview-val" id="prev-price">50¢</span>
+    </div>
+    <div class="preview-item">
+      <span class="preview-label">Auto-bet</span>
+      <span class="preview-val" id="prev-auto">ON</span>
+    </div>
+    <div class="preview-item">
+      <span class="preview-label">Environment</span>
+      <span class="preview-val" id="prev-env">DEMO</span>
+    </div>
+  </div>
+
+  <!-- ── BET SIZING ── -->
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <span class="settings-section-title">💰 Bet Sizing</span>
+      <span class="settings-section-desc">Controls how much money is wagered per detected goal</span>
+    </div>
+    <div class="settings-body">
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Bet Size Per Goal</div>
+          <div class="setting-desc">How much to wager each time a goal is detected and a market is found. Contracts are calculated automatically based on the market price.</div>
+        </div>
+        <div class="setting-control">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adjustNum('betSize', -1)">−</button>
+            <input class="num-field" type="number" id="betSize" value="10" min="1" max="500" oninput="updatePreviews()">
+            <button class="num-btn" onclick="adjustNum('betSize', 1)">+</button>
+          </div>
+          <span class="setting-unit">dollars per goal</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Maximum Bet Cap</div>
+          <div class="setting-desc">Hard ceiling on any single bet. Even if the Kelly calculation suggests more, this cap is never exceeded. Protects against runaway sizing on cheap contracts.</div>
+        </div>
+        <div class="setting-control">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adjustNum('maxBet', -5)">−</button>
+            <input class="num-field" type="number" id="maxBet" value="25" min="1" max="1000" oninput="updatePreviews()">
+            <button class="num-btn" onclick="adjustNum('maxBet', 5)">+</button>
+          </div>
+          <span class="setting-unit">dollars maximum</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Minimum Balance Buffer</div>
+          <div class="setting-desc">The bot will stop firing bets if your Kalshi balance drops below this amount. Prevents betting your entire account dry.</div>
+        </div>
+        <div class="setting-control">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adjustNum('minBuffer', -10)">−</button>
+            <input class="num-field" type="number" id="minBuffer" value="50" min="0" max="10000" oninput="updatePreviews()">
+            <button class="num-btn" onclick="adjustNum('minBuffer', 10)">+</button>
+          </div>
+          <span class="setting-unit">dollar buffer</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── MARKET FILTERS ── -->
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <span class="settings-section-title">🎯 Market Filters</span>
+      <span class="settings-section-desc">Controls which Kalshi markets the bot will bet on</span>
+    </div>
+    <div class="settings-body">
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Max Market Price</div>
+          <div class="setting-desc">Skip any market already priced above this. If a market is at 55¢ after a goal was scored, it's already repriced — no edge left. Lower = stricter filter.</div>
+        </div>
+        <div class="setting-control">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adjustNum('maxPrice', -5)">−</button>
+            <input class="num-field" type="number" id="maxPrice" value="50" min="5" max="95" oninput="updatePreviews()">
+            <button class="num-btn" onclick="adjustNum('maxPrice', 5)">+</button>
+          </div>
+          <span class="setting-unit">cents maximum</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Duplicate Goal Cooldown</div>
+          <div class="setting-desc">After a bet fires for a player, ignore further goal tweets about that same player for this many seconds. Prevents double-betting the same goal from multiple accounts tweeting it.</div>
+        </div>
+        <div class="setting-control">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adjustNum('cooldown', -5)">−</button>
+            <input class="num-field" type="number" id="cooldown" value="30" min="5" max="300" oninput="updatePreviews()">
+            <button class="num-btn" onclick="adjustNum('cooldown', 5)">+</button>
+          </div>
+          <span class="setting-unit">seconds</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── RATE LIMITS ── -->
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <span class="settings-section-title">🛡️ Rate Limits & Safety</span>
+      <span class="settings-section-desc">Prevents over-betting and protects your account</span>
+    </div>
+    <div class="settings-body">
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Max Bets Per Hour</div>
+          <div class="setting-desc">Hard limit on how many bets the bot can fire in a rolling 60-minute window. NHL games average 3–6 goals so 10/hr is conservative. Increase if running multiple games.</div>
+        </div>
+        <div class="setting-control">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adjustNum('maxRate', -1)">−</button>
+            <input class="num-field" type="number" id="maxRate" value="10" min="1" max="100" oninput="updatePreviews()">
+            <button class="num-btn" onclick="adjustNum('maxRate', 1)">+</button>
+          </div>
+          <span class="setting-unit">bets per hour</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Auto-Bet Enabled</div>
+          <div class="setting-desc">When ON, bets fire automatically without confirmation. When OFF, the bot detects goals and logs them but does NOT place any orders — useful for testing.</div>
+        </div>
+        <div class="setting-control">
+          <div class="toggle-wrap">
+            <label class="toggle">
+              <input type="checkbox" id="autoBet" checked onchange="updatePreviews()">
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label" id="autoBetLabel">Enabled</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── ENVIRONMENT ── -->
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <span class="settings-section-title">🌐 Environment</span>
+      <span class="settings-section-desc">Controls which Kalshi API endpoint is used</span>
+    </div>
+    <div class="settings-body">
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Kalshi API Environment</div>
+          <div class="setting-desc">DEMO uses Kalshi's test environment — no real money. LIVE connects to the real exchange. Always test on demo first before switching to live.</div>
+        </div>
+        <div class="setting-control">
+          <select class="setting-select" id="environment" onchange="updatePreviews()">
+            <option value="demo" selected>DEMO (No real money)</option>
+            <option value="live">LIVE (Real money ⚠️)</option>
+          </select>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── EXPORT ── -->
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <span class="settings-section-title">📁 Export & Logs</span>
+      <span class="settings-section-desc">Download your session data</span>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Export Session Log</div>
+          <div class="setting-desc">Downloads all bet records from this session as a JSON file. Use this to analyze performance or share with the bot for debugging.</div>
+        </div>
+        <div class="setting-control">
+          <button class="btn goal" onclick="exportLog()">⬇ Export Log JSON</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Export .env Config</div>
+          <div class="setting-desc">Downloads a ready-to-use .env file with your current settings pre-filled. Drop it into C:\prop_sniper\ to apply.</div>
+        </div>
+        <div class="setting-control">
+          <button class="btn" onclick="exportEnv()">⬇ Export .env File</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Save bar -->
+<div class="save-bar">
+  <span class="save-status" id="saveStatus">Unsaved changes</span>
+  <div style="display:flex;gap:10px">
+    <button class="btn" onclick="resetDefaults()">Reset Defaults</button>
+    <button class="save-btn" onclick="saveSettings()">Save Settings</button>
+  </div>
+</div>
+
+</div><!-- end tab-settings -->
+
+
+<script>
+// ── TABS ──────────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US', {hour12: false});
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── SETTINGS STATE ─────────────────────────────────────────────────────────
+const settings = {
+  betSize:     10,
+  maxBet:      25,
+  minBuffer:   50,
+  maxPrice:    50,
+  cooldown:    30,
+  maxRate:     10,
+  autoBet:     true,
+  environment: 'demo',
+};
+
+function adjustNum(id, delta) {
+  const el  = document.getElementById(id);
+  const val = parseFloat(el.value) + delta;
+  const min = parseFloat(el.min);
+  const max = parseFloat(el.max);
+  el.value  = Math.max(min, Math.min(max, val));
+  updatePreviews();
+  document.getElementById('saveStatus').textContent = 'Unsaved changes';
+  document.getElementById('saveStatus').className   = 'save-status';
+}
+
+function updatePreviews() {
+  const bet     = parseFloat(document.getElementById('betSize').value)     || 10;
+  const maxBet  = parseFloat(document.getElementById('maxBet').value)      || 25;
+  const rate    = parseFloat(document.getElementById('maxRate').value)     || 10;
+  const price   = parseFloat(document.getElementById('maxPrice').value)    || 50;
+  const auto    = document.getElementById('autoBet').checked;
+  const env     = document.getElementById('environment').value;
+
+  document.getElementById('prev-bet').textContent   = '$' + bet.toFixed(2);
+  document.getElementById('prev-max').textContent   = '$' + maxBet.toFixed(2);
+  document.getElementById('prev-rate').textContent  = rate;
+  document.getElementById('prev-price').textContent = price + '¢';
+  document.getElementById('prev-auto').textContent  = auto ? 'ON' : 'OFF (monitor only)';
+  document.getElementById('prev-auto').style.color  = auto ? 'var(--green)' : 'var(--orange)';
+  document.getElementById('prev-env').textContent   = env.toUpperCase();
+  document.getElementById('prev-env').style.color   = env === 'live' ? 'var(--red)' : 'var(--ice)';
+  document.getElementById('autoBetLabel').textContent = auto ? 'Enabled' : 'Disabled (monitor only)';
+
+  document.getElementById('saveStatus').textContent = 'Unsaved changes';
+  document.getElementById('saveStatus').className   = 'save-status';
+}
+
+function saveSettings() {
+  settings.betSize     = parseFloat(document.getElementById('betSize').value)  || 10;
+  settings.maxBet      = parseFloat(document.getElementById('maxBet').value)   || 25;
+  settings.minBuffer   = parseFloat(document.getElementById('minBuffer').value)|| 50;
+  settings.maxPrice    = parseFloat(document.getElementById('maxPrice').value) || 50;
+  settings.cooldown    = parseFloat(document.getElementById('cooldown').value) || 30;
+  settings.maxRate     = parseFloat(document.getElementById('maxRate').value)  || 10;
+  settings.autoBet     = document.getElementById('autoBet').checked;
+  settings.environment = document.getElementById('environment').value;
+
+  localStorage.setItem('sniperSettings', JSON.stringify(settings));
+
+  const status = document.getElementById('saveStatus');
+  status.textContent = '✓ Saved at ' + new Date().toLocaleTimeString();
+  status.className   = 'save-status saved';
+
+  addLog(`Settings saved — bet size $${settings.betSize}, max ${settings.maxBet}, auto-bet ${settings.autoBet ? 'ON' : 'OFF'}`, 'success');
+}
+
+function resetDefaults() {
+  document.getElementById('betSize').value   = 10;
+  document.getElementById('maxBet').value    = 25;
+  document.getElementById('minBuffer').value = 50;
+  document.getElementById('maxPrice').value  = 50;
+  document.getElementById('cooldown').value  = 30;
+  document.getElementById('maxRate').value   = 10;
+  document.getElementById('autoBet').checked = true;
+  document.getElementById('environment').value = 'demo';
+  updatePreviews();
+  addLog('Settings reset to defaults', 'warn');
+}
+
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sniperSettings') || '{}');
+    if (saved.betSize)     { document.getElementById('betSize').value   = saved.betSize; }
+    if (saved.maxBet)      { document.getElementById('maxBet').value    = saved.maxBet; }
+    if (saved.minBuffer)   { document.getElementById('minBuffer').value = saved.minBuffer; }
+    if (saved.maxPrice)    { document.getElementById('maxPrice').value  = saved.maxPrice; }
+    if (saved.cooldown)    { document.getElementById('cooldown').value  = saved.cooldown; }
+    if (saved.maxRate)     { document.getElementById('maxRate').value   = saved.maxRate; }
+    if (saved.autoBet !== undefined) { document.getElementById('autoBet').checked = saved.autoBet; }
+    if (saved.environment) { document.getElementById('environment').value = saved.environment; }
+    updatePreviews();
+  } catch(e) {}
+}
+
+function exportLog() {
+  const data = JSON.stringify(state.events, null, 2);
+  const blob = new Blob([data], {type: 'application/json'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `sniper_log_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  addLog('Session log exported', 'info');
+}
+
+function exportEnv() {
+  const env = document.getElementById('environment').value;
+  const apiBase = env === 'live'
+    ? 'https://api.elections.kalshi.com/trade-api/v2'
+    : 'https://demo-api.kalshi.co/trade-api/v2';
+
+  const content = [
+    '# Kalshi API',
+    'KALSHI_KEY_ID=your-key-id-here',
+    'KALSHI_PRIVATE_KEY_PATH=kalshi_key.pem',
+    `KALSHI_API_BASE=${apiBase}`,
+    '',
+    '# X (Twitter) API',
+    'X_BEARER_TOKEN=your-x-bearer-token-here',
+    '',
+    '# Risk Controls',
+    `BET_SIZE_DOLLARS=${document.getElementById('betSize').value}`,
+    `MAX_BET_DOLLARS=${document.getElementById('maxBet').value}`,
+    `MIN_BALANCE_BUFFER=${document.getElementById('minBuffer').value}`,
+    `MAX_BETS_PER_HOUR=${document.getElementById('maxRate').value}`,
+  ].join('\n');
+
+  const blob = new Blob([content], {type: 'text/plain'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = '.env';
+  a.click();
+  addLog('.env config exported with current settings', 'success');
+}
+
+// ── DASHBOARD STATE ────────────────────────────────────────────────────────
+// Counters defined clearly:
+//   goals     = every goal tweet detected (all outcomes)
+//   fired     = market was found, order was placed (filled + missed)
+//   filled    = order was actually filled
+//   missed    = order fired but IOC not filled (market already repriced)
+//   noMarket  = goal detected but no Kalshi market found
+//   nightlyBanned = set of player names already bet on tonight (reset at 6am)
+
+const state = {
+  goals: 0, fired: 0, filled: 0, missed: 0, noMarket: 0, skippedNightly: 0,
+  wagered: 0, grossReturn: 0,
+  latencies: [], fillPrices: [], events: [], logs: [],
+  nightlyBanned: new Set(),
+  nightlyBannedDate: new Date().toDateString(),
+};
+
+const PLAYERS = [
+  'Connor McDavid','Auston Matthews','Nathan MacKinnon','Leon Draisaitl',
+  'Alex Ovechkin','Sidney Crosby','Cale Makar','Kirill Kaprizov',
+  'David Pastrnak','Brad Marchand','John Tavares','Mitch Marner',
+];
+
+const TICKERS = [
+  'NHLGOAL-MCDAVID-20260225','NHLGOAL-MATTHEWS-20260225',
+  'NHLGOAL-MACKINNON-20260225','NHLGOAL-PASTRNAK-20260225',
+];
+
+// ── NIGHTLY BAN ────────────────────────────────────────────────────────────
+// Once we bet on a player tonight, ban them until 6am tomorrow.
+// This prevents betting on a player's 2nd, 3rd goal (market will be gone/settled anyway).
+
+function getNightlyKey() {
+  // Reset at 6am — so "tonight" = yesterday evening + today until 6am
+  const now = new Date();
+  if (now.getHours() < 6) {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toDateString();
+  }
+  return now.toDateString();
+}
+
+function checkAndBanPlayer(playerName) {
+  // If date has rolled over, clear the ban list
+  const key = getNightlyKey();
+  if (key !== state.nightlyBannedDate) {
+    state.nightlyBanned.clear();
+    state.nightlyBannedDate = key;
+    addLog('🌅 New game day — nightly player ban list cleared', 'info');
+  }
+  const normalized = playerName.toLowerCase().trim();
+  if (state.nightlyBanned.has(normalized)) return true; // already banned
+  return false;
+}
+
+function banPlayerTonight(playerName) {
+  state.nightlyBanned.add(playerName.toLowerCase().trim());
+}
+
+function getBannedList() {
+  return Array.from(state.nightlyBanned).map(p =>
+    p.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+  );
+}
+
+// ── LOG ────────────────────────────────────────────────────────────────────
+function addLog(msg, type='info') {
+  const ts = new Date().toLocaleTimeString('en-US', {hour12: false});
+  state.logs.unshift({ts, msg, type});
+  state.logs = state.logs.slice(0, 60);
+  const list = document.getElementById('logList');
+  list.innerHTML = state.logs.map(e =>
+    `<div class="log-entry">
+      <span class="log-ts">${e.ts}</span>
+      <span class="log-msg ${e.type}">${e.msg}</span>
+    </div>`
+  ).join('');
+  document.getElementById('logCount').textContent = state.logs.length + ' events';
+}
+
+// ── KPIs ───────────────────────────────────────────────────────────────────
+function updateKPIs() {
+  // Fill rate = filled / fired (orders placed that actually got filled)
+  const fillRate = state.fired
+    ? (state.filled / state.fired * 100).toFixed(1) + '%'
+    : '—';
+
+  // Market hit rate = goals where a market was found / total goals detected
+  // fired + missed both mean market WAS found. noMarket means it wasn't.
+  const marketsFound = state.fired; // fired already = market found + order placed
+  const mktRate = state.goals
+    ? (marketsFound / state.goals * 100).toFixed(1) + '%'
+    : '—';
+
+  const avgLat   = state.latencies.length
+    ? Math.round(state.latencies.reduce((a,b)=>a+b,0) / state.latencies.length) + 'ms'
+    : '—';
+  const bestLat  = state.latencies.length
+    ? Math.min(...state.latencies).toFixed(0) + 'ms'
+    : '—';
+  const avgPrice = state.fillPrices.length
+    ? Math.round(state.fillPrices.reduce((a,b)=>a+b,0) / state.fillPrices.length) + '¢'
+    : '—';
+
+  // P&L: grossReturn = total payout if all filled YES contracts resolve
+  // wagered = actual cash spent buying contracts
+  const fees = state.grossReturn * 0.07;
+  const net  = state.grossReturn - fees - state.wagered;
+
+  // KPI cards
+  document.getElementById('kGoals').textContent      = state.goals;
+  document.getElementById('kFillRate').textContent   = fillRate;
+  document.getElementById('kFillSub').textContent    = state.fired
+    ? `${state.filled} filled / ${state.fired} fired`
+    : 'no bets yet';
+  document.getElementById('kLatency').textContent    = avgLat;
+  document.getElementById('kBestLat').textContent    = bestLat;
+  document.getElementById('kPnl').textContent        = '$' + net.toFixed(2);
+  document.getElementById('kPnl').className          = 'kpi-val ' + (net >= 0 ? 'green' : 'red');
+  document.getElementById('kWagered').textContent    = '$' + state.wagered.toFixed(2);
+  document.getElementById('kMarketRate').textContent = mktRate;
+  document.getElementById('kAvgPrice').textContent   = avgPrice;
+
+  // P&L breakdown panel
+  document.getElementById('pWagered').textContent  = '$' + state.wagered.toFixed(2);
+  document.getElementById('pGross').textContent    = '$' + state.grossReturn.toFixed(2);
+  document.getElementById('pFees').textContent     = '-$' + fees.toFixed(2);
+  document.getElementById('pNet').textContent      = '$' + net.toFixed(2);
+  document.getElementById('pNet').className        = 'pnl-value ' + (net >= 0 ? 'pos' : 'neg');
+  document.getElementById('pFired').textContent    = state.fired;
+  document.getElementById('pFilled').textContent   = state.filled;
+  document.getElementById('pMissed').textContent   = state.missed;
+  document.getElementById('pNoMkt').textContent    = state.noMarket;
+
+  // Update banned list display
+  const banned = getBannedList();
+  const bannedEl = document.getElementById('bannedList');
+  if (bannedEl) {
+    bannedEl.textContent = banned.length ? banned.join(', ') : 'None';
+  }
+}
+
+// ── LATENCY CHART ──────────────────────────────────────────────────────────
+function updateLatencyChart() {
+  const wrap = document.getElementById('latencyBars');
+  document.getElementById('latCount').textContent = state.latencies.length + ' fills';
+  if (!state.latencies.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:0.6rem;padding:20px">No fills yet</div>';
+    return;
+  }
+  const last = state.latencies.slice(-20);
+  const max  = Math.max(...last);
+  wrap.innerHTML = last.map(ms => {
+    const h   = Math.max(4, Math.round((ms / max) * 76));
+    const cls = ms < 200 ? 'fast' : ms < 500 ? 'medium' : 'slow';
+    return `<div class="chart-bar-wrap">
+      <div class="chart-bar ${cls}" style="height:${h}px"></div>
+      <div class="chart-bar-label">${Math.round(ms)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── BET CARD ───────────────────────────────────────────────────────────────
+function addBetCard(ev) {
+  state.events.unshift(ev);
+
+  const feed = document.getElementById('feed');
+
+  // Hide empty state safely
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.style.display = 'none';
+
+  const card = document.createElement('div');
+  card.className = `bet-card ${ev.type}`;
+
+  const badges = {
+    filled:    `<span class="bet-badge filled">✓ FILLED</span>`,
+    missed:    `<span class="bet-badge missed">✗ MISSED</span>`,
+    'no-market': `<span class="bet-badge no-market">NO MARKET</span>`,
+    'banned':    `<span class="bet-badge no-market">⛔ BANNED TONIGHT</span>`,
+  };
+
+  const showNums = ev.type === 'filled' || ev.type === 'missed';
+  const numsHtml = showNums ? `
+    <div class="bet-numbers">
+      <div class="bn"><span class="bn-label">Ticker</span><span class="bn-val ice">${ev.ticker||'—'}</span></div>
+      <div class="bn"><span class="bn-label">Price</span><span class="bn-val orange">${ev.price||'—'}¢</span></div>
+      <div class="bn"><span class="bn-label">Contracts</span><span class="bn-val">${ev.contracts||'—'}</span></div>
+      <div class="bn"><span class="bn-label">Wagered</span><span class="bn-val">${ev.wagered||'—'}</span></div>
+      <div class="bn"><span class="bn-label">Latency</span><span class="bn-val ${ev.type==='filled'?'green':'red'}">${ev.latency||'—'}ms</span></div>
+      ${ev.pnl ? `<div class="bn"><span class="bn-label">Est P&L</span><span class="bn-val green">+${ev.pnl}</span></div>` : ''}
+    </div>` : '';
+
+  card.innerHTML = `
+    <div class="bet-top">
+      <div>
+        <div class="bet-player">${ev.player}</div>
+        <div class="bet-tweet">${ev.tweet}</div>
+      </div>
+      ${badges[ev.type] || ''}
+    </div>
+    ${numsHtml}
+    <div class="bet-ts">${new Date().toLocaleTimeString()}</div>
+  `;
+
+  // Insert at top of feed
+  feed.insertBefore(card, feed.firstChild);
+
+  // Keep feed from growing too large
+  const cards = feed.querySelectorAll('.bet-card');
+  if (cards.length > 40) cards[cards.length - 1].remove();
+
+  document.getElementById('feedCount').textContent = state.events.length + ' events';
+}
+
+// ── SIMULATE ───────────────────────────────────────────────────────────────
+function simulateGoal(miss = false) {
+  const betSize   = parseFloat(document.getElementById('betSize').value) || 10;
+  const player    = PLAYERS[Math.floor(Math.random() * PLAYERS.length)];
+  const ticker    = TICKERS[Math.floor(Math.random() * TICKERS.length)];
+  const price     = Math.floor(Math.random() * 12) + 5;   // 5–16¢
+  const contracts = Math.max(1, Math.floor(betSize / (price / 100)));
+  const wagered   = ((price / 100) * contracts).toFixed(2);
+  const latency   = Math.floor(Math.random() * 350) + 80;
+  // Correct P&L: each contract pays $1 on YES resolution
+  const payout    = contracts * 1.00;
+  const fees      = payout * 0.07;
+  const pnl       = (payout - fees - parseFloat(wagered)).toFixed(2);
+  const team      = ['EDM','TOR','BOS','NYR','COL'][Math.floor(Math.random()*5)];
+  const tweet     = `🚨 GOAL 🚨 ${player} scores! ${team} lead!`;
+
+  state.goals++;
+
+  // Check nightly ban
+  if (checkAndBanPlayer(player)) {
+    state.skippedNightly = (state.skippedNightly || 0) + 1;
+    addBetCard({ type: 'banned', player, tweet });
+    addLog(`🚨 GOAL: ${player} — detected`, 'fire');
+    addLog(`⛔ SKIPPED: ${player} already bet on tonight`, 'warn');
+    updateKPIs();
+    return;
+  }
+
+  if (!miss) {
+    state.fired++; state.filled++;
+    state.wagered     += parseFloat(wagered);
+    state.grossReturn += payout;   // FIX: was += contracts (wrong unit)
+    state.latencies.push(latency);
+    state.fillPrices.push(price);
+    banPlayerTonight(player);      // Add to nightly ban after successful fill
+    addBetCard({ type: 'filled', player, tweet, ticker, price, contracts, wagered: '$' + wagered, latency, pnl: '$' + pnl });
+    addLog(`🚨 GOAL: ${player} — tweet detected`, 'fire');
+    addLog(`📋 ${ticker} @ ${price}¢ — ${contracts} contracts ($${wagered})`, 'info');
+    addLog(`✅ FILLED in ${latency}ms | est P&L +$${pnl} | ${player} banned tonight`, 'success');
+  } else {
+    state.fired++; state.missed++;
+    // Don't ban on miss — market was there but we didn't fill, player can score again
+    addBetCard({ type: 'missed', player, tweet, ticker, price, contracts, wagered: '$' + wagered, latency });
+    addLog(`🚨 GOAL: ${player} — tweet detected`, 'fire');
+    addLog(`❌ MISS: IOC not filled — market already repriced`, 'error');
+  }
+
+  updateKPIs();
+  updateLatencyChart();
+}
+
+function simulateNoMarket() {
+  const player = PLAYERS[Math.floor(Math.random() * PLAYERS.length)];
+  const tweet  = `GOAL! ${player} scores to tie it up!`;
+  state.goals++; state.noMarket++;
+  addBetCard({ type: 'no-market', player, tweet });
+  addLog(`🚨 GOAL: ${player} — no Kalshi market found`, 'miss');
+  updateKPIs();
+}
+
+function clearAll() {
+  Object.assign(state, {
+    goals:0, fired:0, filled:0, missed:0, noMarket:0, skippedNightly:0,
+    wagered:0, grossReturn:0,
+    latencies:[], fillPrices:[], events:[], logs:[],
+  });
+  // Don't clear nightlyBanned on clear — that persists until 6am
+  // (clearing the feed doesn't mean the night is over)
+
+  document.getElementById('feed').innerHTML =
+    `<div class="empty" id="emptyState">
+      <div class="empty-icon">🏒</div>
+      <h3>Awaiting Goals</h3>
+      <p>STREAM IS LIVE<br>MONITORING 31 OFFICIAL NHL ACCOUNTS<br>BETS APPEAR HERE ON DETECTION</p>
+    </div>`;
+  document.getElementById('logList').innerHTML = '';
+  updateKPIs();
+  updateLatencyChart();
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+loadSettings();
+addLog('NHL Goal Sniper initialized', 'info');
+addLog('X stream: connecting to 31 official accounts...', 'info');
+addLog('Kalshi API: authenticated (DEMO mode)', 'success');
+addLog('Monitoring: NHL anytime goal scorer markets', 'info');
+updateKPIs();
+updateLatencyChart();
+</script>
+</body>
+</html>
