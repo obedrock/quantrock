@@ -452,7 +452,7 @@ body::before {
     <div class="kpi orange">
       <div class="kpi-label">Avg Latency</div>
       <div class="kpi-val orange" id="kLatency">—</div>
-      <div class="kpi-sub">Tweet → filled</div>
+      <div class="kpi-sub">NHL API → filled</div>
     </div>
     <div class="kpi yellow">
       <div class="kpi-label">Best Latency</div>
@@ -674,7 +674,7 @@ body::before {
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-label">Duplicate Goal Cooldown</div>
-          <div class="setting-desc">After a bet fires for a player, ignore further goal tweets about that same player for this many seconds. Prevents double-betting the same goal from multiple accounts tweeting it.</div>
+          <div class="setting-desc">After a bet fires for a player, ignore further goal events for that same player for this many seconds. Prevents double-betting the same goal across multiple NHL API polls.</div>
         </div>
         <div class="setting-control">
           <div class="num-input-wrap">
@@ -950,7 +950,7 @@ function exportEnv() {
 
 // ── DASHBOARD STATE ────────────────────────────────────────────────────────
 // Counters defined clearly:
-//   goals     = every goal tweet detected (all outcomes)
+//   goals     = every goal event detected via NHL Stats API (all outcomes)
 //   fired     = market was found, order was placed (filled + missed)
 //   filled    = order was actually filled
 //   missed    = order fired but IOC not filled (market already repriced)
@@ -1146,7 +1146,7 @@ function addBetCard(ev) {
     <div class="bet-top">
       <div>
         <div class="bet-player">${ev.player}</div>
-        <div class="bet-tweet">${ev.tweet}</div>
+        <div class="bet-tweet">${ev.description}</div>
       </div>
       ${badges[ev.type] || ''}
     </div>
@@ -1178,14 +1178,14 @@ function simulateGoal(miss = false) {
   const fees      = payout * 0.07;
   const pnl       = (payout - fees - parseFloat(wagered)).toFixed(2);
   const team      = ['EDM','TOR','BOS','NYR','COL'][Math.floor(Math.random()*5)];
-  const tweet     = `🚨 GOAL 🚨 ${player} scores! ${team} lead!`;
+  const description = `GOAL — ${player} (${team}) via NHL Stats API`;
 
   state.goals++;
 
   // Check nightly ban
   if (checkAndBanPlayer(player)) {
     state.skippedNightly = (state.skippedNightly || 0) + 1;
-    addBetCard({ type: 'banned', player, tweet });
+    addBetCard({ type: 'banned', player, description });
     addLog(`🚨 GOAL: ${player} — detected`, 'fire');
     addLog(`⛔ SKIPPED: ${player} already bet on tonight`, 'warn');
     updateKPIs();
@@ -1199,15 +1199,15 @@ function simulateGoal(miss = false) {
     state.latencies.push(latency);
     state.fillPrices.push(price);
     banPlayerTonight(player);      // Add to nightly ban after successful fill
-    addBetCard({ type: 'filled', player, tweet, ticker, price, contracts, wagered: '$' + wagered, latency, pnl: '$' + pnl });
-    addLog(`🚨 GOAL: ${player} — tweet detected`, 'fire');
+    addBetCard({ type: 'filled', player, description, ticker, price, contracts, wagered: '$' + wagered, latency, pnl: '$' + pnl });
+    addLog(`🚨 GOAL: ${player} — detected via NHL Stats API`, 'fire');
     addLog(`📋 ${ticker} @ ${price}¢ — ${contracts} contracts ($${wagered})`, 'info');
     addLog(`✅ FILLED in ${latency}ms | est P&L +$${pnl} | ${player} banned tonight`, 'success');
   } else {
     state.fired++; state.missed++;
     // Don't ban on miss — market was there but we didn't fill, player can score again
-    addBetCard({ type: 'missed', player, tweet, ticker, price, contracts, wagered: '$' + wagered, latency });
-    addLog(`🚨 GOAL: ${player} — tweet detected`, 'fire');
+    addBetCard({ type: 'missed', player, description, ticker, price, contracts, wagered: '$' + wagered, latency });
+    addLog(`🚨 GOAL: ${player} — detected via NHL Stats API`, 'fire');
     addLog(`❌ MISS: IOC not filled — market already repriced`, 'error');
   }
 
@@ -1216,10 +1216,10 @@ function simulateGoal(miss = false) {
 }
 
 function simulateNoMarket() {
-  const player = PLAYERS[Math.floor(Math.random() * PLAYERS.length)];
-  const tweet  = `GOAL! ${player} scores to tie it up!`;
+  const player      = PLAYERS[Math.floor(Math.random() * PLAYERS.length)];
+  const description = `GOAL — ${player} via NHL Stats API`;
   state.goals++; state.noMarket++;
-  addBetCard({ type: 'no-market', player, tweet });
+  addBetCard({ type: 'no-market', player, description });
   addLog(`🚨 GOAL: ${player} — no Kalshi market found`, 'miss');
   updateKPIs();
 }
