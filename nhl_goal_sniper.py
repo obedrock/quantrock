@@ -30,7 +30,7 @@ load_dotenv()
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 NHL_API_BASE     = "https://api-web.nhle.com/v1"
-POLL_INTERVAL    = 2.0   # seconds between polls per live game
+POLL_INTERVAL    = 1.0   # seconds between poll cycles (all games run in parallel)
 NO_GAMES_WAIT    = 30.0  # seconds to wait when no live games found
 COOLDOWN_SECONDS = 30    # prevent double-bet on same player/event
 MAX_MARKET_PRICE = 50    # don't bet if market already > 50¢ (already repriced)
@@ -261,6 +261,35 @@ class NHLStatsPoller:
 
         return new_goals
 
+    async def _poll_game(self, game_id: int, on_goal) -> None:
+        """Fetch and process new goals for a single game."""
+        goals = await self._get_new_goals(game_id)
+        for g in goals:
+            t_detect = time.time()
+            self._seen_event_ids.add(g["event_id"])
+
+            print(f"\n🚨 GOAL DETECTED (game {game_id}): {g['description']}")
+            print(f"   Player: {g['player_name'] or 'unknown'}")
+
+            key = g["player_name"] or str(g["event_id"])
+            if self._on_cooldown(key):
+                print(f"   ⏳ Cooldown active — duplicate skipped")
+                continue
+            self._set_cooldown(key)
+
+            goal = GoalEvent(
+                timestamp=datetime.now().isoformat(),
+                event_id=g["event_id"],
+                game_id=game_id,
+                description=g["description"],
+                player_name=g["player_name"],
+                team=g["team"],
+                period=g["period"],
+                time_in_period=g["time_in_period"],
+                detect_latency_ms=(time.time() - t_detect) * 1000,
+            )
+            await on_goal(goal)
+
     async def poll(self, on_goal):
         print("[NHL] Starting live game poller...")
 
@@ -275,34 +304,8 @@ class NHLStatsPoller:
 
                 print(f"[NHL] Monitoring {len(game_ids)} live game(s): {game_ids}")
 
-                for game_id in game_ids:
-                    goals = await self._get_new_goals(game_id)
-
-                    for g in goals:
-                        t_detect = time.time()
-                        self._seen_event_ids.add(g["event_id"])
-
-                        print(f"\n🚨 GOAL DETECTED (game {game_id}): {g['description']}")
-                        print(f"   Player: {g['player_name'] or 'unknown'}")
-
-                        key = g["player_name"] or str(g["event_id"])
-                        if self._on_cooldown(key):
-                            print(f"   ⏳ Cooldown active — duplicate skipped")
-                            continue
-                        self._set_cooldown(key)
-
-                        goal = GoalEvent(
-                            timestamp=datetime.now().isoformat(),
-                            event_id=g["event_id"],
-                            game_id=game_id,
-                            description=g["description"],
-                            player_name=g["player_name"],
-                            team=g["team"],
-                            period=g["period"],
-                            time_in_period=g["time_in_period"],
-                            detect_latency_ms=(time.time() - t_detect) * 1000,
-                        )
-                        await on_goal(goal)
+                # Poll all live games simultaneously
+                await asyncio.gather(*[self._poll_game(gid, on_goal) for gid in game_ids])
 
                 await asyncio.sleep(POLL_INTERVAL)
 
@@ -438,7 +441,7 @@ class NHLGoalSniper:
         print("  🏒 NHL GOAL SNIPER")
         print("="*60)
         print(f"  Source:      NHL Stats API (api-web.nhle.com)")
-        print(f"  Poll rate:   every {POLL_INTERVAL}s per live game")
+        print(f"  Poll rate:   every {POLL_INTERVAL}s (all games in parallel)")
         print(f"  Bet size:    ${BET_SIZE_DOLLARS} per goal")
         print(f"  Max price:   {MAX_MARKET_PRICE}¢ (skip if already repriced)")
         print(f"  Cooldown:    {COOLDOWN_SECONDS}s per player")
